@@ -1,5 +1,5 @@
- import React from "react";
-import MediPredictDashboard from "./medipredictdashboard";
+import React from "react";
+import MediPredictDashboard from "./medipredictdashboard.js";
 import  "./App.css";
 
 function App() {
