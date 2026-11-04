@@ -1,142 +1,367 @@
- import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./medipredictdashboard.css";
+
+const API_BASE_URL =
+  "https://medipredict-4bkd.onrender.com/api";
 
 const MediPredictDashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [selectedPatient, setSelectedPatient] = useState(null);
 
-  // Sample patient data
-  const patientData = [
-    { id: 1, name: "Sarah Johnson", age: 42, condition: "Lung Cancer", status: "Critical", lastVisit: "2025-09-10" },
-    { id: 2, name: "Michael Chen", age: 58, condition: "Breast Cancer", status: "Stable", lastVisit: "2025-09-11" },
-    { id: 3, name: "Emma Rodriguez", age: 35, condition: "Melanoma", status: "Improving", lastVisit: "2025-09-09" },
-    { id: 4, name: "James Wilson", age: 67, condition: "Prostate Cancer", status: "Monitoring", lastVisit: "2025-09-08" },
-    { id: 5, name: "Olivia Brown", age: 29, condition: "Thyroid Cancer", status: "Stable", lastVisit: "2025-09-12" },
-  ];
+  const [patients, setPatients] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [reports, setReports] = useState([]);
+  const [messages, setMessages] = useState([]);
+  const [analytics, setAnalytics] = useState({});
 
-  // Sample appointments data
-  const appointments = [
-    { id: 1, patient: "Sarah Johnson", time: "10:00 AM", type: "Follow-up", status: "Confirmed", date: "2025-09-15" },
-    { id: 2, patient: "Michael Chen", time: "11:30 AM", type: "Consultation", status: "Scheduled", date: "2025-09-15" },
-    { id: 3, patient: "Emma Rodriguez", time: "12:00 PM", type: "Treatment", status: "Confirmed", date: "2025-09-16" },
-    { id: 4, patient: "James Wilson", time: "1:15 PM", type: "Follow-up", status: "Confirmed", date: "2025-09-15" },
-    { id: 5, patient: "Olivia Brown", time: "2:00 PM", type: "Consultation", status: "Scheduled", date: "2025-09-16" },
-    { id: 6, patient: "Liam Smith", time: "2:45 PM", type: "Treatment", status: "Confirmed", date: "2025-09-15" },
-    { id: 7, patient: "Sophia Davis", time: "3:30 PM", type: "Consultation", status: "Pending", date: "2025-09-15" },
-    { id: 8, patient: "Noah Wilson", time: "4:00 PM", type: "Follow-up", status: "Confirmed", date: "2025-09-17" },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  // Sample reports data
-  const reports = [
-    { id: 1, patient: "Sarah Johnson", type: "CT Scan", doctor: "Dr. Smith", date: "2025-09-10", status: "Reviewed" },
-    { id: 2, patient: "Michael Chen", type: "Mammography", doctor: "Dr. Adams", date: "2025-09-11", status: "Pending" },
-    { id: 3, patient: "Emma Rodriguez", type: "Blood Test", doctor: "Dr. Lee", date: "2025-09-12", status: "Reviewed" },
-    { id: 4, patient: "James Wilson", type: "MRI", doctor: "Dr. Smith", date: "2025-09-13", status: "Pending" },
-    { id: 5, patient: "Olivia Brown", type: "Thyroid Scan", doctor: "Dr. Adams", date: "2025-09-14", status: "Reviewed" },
-  ];
-
-  const today = new Date().toISOString().split("T")[0];
-  const todaysAppointments = appointments.filter((apt) => apt.date === today);
-  const pendingCount = todaysAppointments.filter((apt) => apt.status.toLowerCase() === "pending").length;
-
-  // Messages tab states
   const [showCompose, setShowCompose] = useState(false);
-  const [newMessage, setNewMessage] = useState({ sender: "Dr. Smith", recipient: "", subject: "", content: "" });
-  const [replyOpenId, setReplyOpenId] = useState(null);
-  const [replyContent, setReplyContent] = useState("");
+  const [newMessage, setNewMessage] = useState({
+    sender: "Dr. Smith",
+    subject: "",
+    content: "",
+  });
 
-  const messages = [
-    { id: 1, sender: "Dr. Adams", subject: "Lab Report Review", content: "Please check the recent CT scan reports.", date: "2025-09-14", unread: true },
-    { id: 2, sender: "Nurse Emily", subject: "Patient Admission", content: "New patient admitted in Ward 3.", date: "2025-09-13", unread: false },
-    { id: 3, sender: "Dr. Lee", subject: "Follow-up Reminder", content: "Reminder: Schedule follow-up for Sarah Johnson.", date: "2025-09-12", unread: true },
-    { id: 4, sender: "Admin Office", subject: "Monthly Meeting", content: "Monthly oncology department meeting scheduled.", date: "2025-09-10", unread: false },
-  ];
+  const [newPatient, setNewPatient] = useState({
+    name: "",
+    age: "",
+    condition: "",
+    status: "Monitoring",
+  });
 
-  const handleSendMessage = () => {
-    if(newMessage.recipient && newMessage.subject && newMessage.content){
-      messages.unshift({ 
-        id: messages.length + 1, 
-        sender: newMessage.sender, 
-        subject: newMessage.subject, 
-        content: newMessage.content, 
-        date: new Date().toISOString().split("T")[0], 
-        unread: true 
+  const [newAppointment, setNewAppointment] = useState({
+    patient: "",
+    time: "",
+    type: "Consultation",
+    date: "",
+  });
+
+  const [newReport, setNewReport] = useState({
+    patient: "",
+    type: "",
+    doctor: "Dr. Smith",
+    date: "",
+  });
+
+  // ================= API HELPER ================= //
+
+  const apiRequest = async (endpoint, options = {}) => {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(result.message || `API Error: ${response.status}`);
+    }
+
+    return response.json();
+  };
+
+  // ================= FETCH ALL DATA ================= //
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [
+        patientData,
+        appointmentData,
+        reportData,
+        messageData,
+        analyticsData,
+      ] = await Promise.all([
+        apiRequest("/patients"),
+        apiRequest("/appointments"),
+        apiRequest("/reports"),
+        apiRequest("/messages"),
+        apiRequest("/analytics"),
+      ]);
+
+      setPatients(patientData);
+      setAppointments(appointmentData);
+      setReports(reportData);
+      setMessages(messageData);
+      setAnalytics(analyticsData);
+    } catch (err) {
+      console.error("Dashboard API Error:", err);
+      setError(err.message || "Unable to connect to backend.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  // ================= ADD PATIENT ================= //
+
+  const handleAddPatient = async (e) => {
+    e.preventDefault();
+
+    try {
+      setSaving(true);
+
+      const patient = await apiRequest("/patients", {
+        method: "POST",
+        body: JSON.stringify({
+          ...newPatient,
+          age: Number(newPatient.age),
+        }),
       });
-      setNewMessage({ sender: "Dr. Smith", recipient: "", subject: "", content: "" });
-      setShowCompose(false);
-    } else {
-      alert("Please fill all fields");
+
+      setPatients((prev) => [...prev, patient]);
+
+      setNewPatient({
+        name: "",
+        age: "",
+        condition: "",
+        status: "Monitoring",
+      });
+
+      alert("Patient added successfully!");
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleSendReply = (id) => {
-    if(replyContent.trim() !== ""){
-      alert(`Reply sent for message ID ${id}: ${replyContent}`);
-      setReplyContent("");
-      setReplyOpenId(null);
-    } else {
-      alert("Reply cannot be empty");
+  // ================= ADD APPOINTMENT ================= //
+
+  const handleAddAppointment = async (e) => {
+    e.preventDefault();
+
+    try {
+      setSaving(true);
+
+      const appointment = await apiRequest("/appointments", {
+        method: "POST",
+        body: JSON.stringify(newAppointment),
+      });
+
+      setAppointments((prev) => [...prev, appointment]);
+
+      setNewAppointment({
+        patient: "",
+        time: "",
+        type: "Consultation",
+        date: "",
+      });
+
+      alert("Appointment added successfully!");
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
     }
   };
+
+  // ================= ADD REPORT ================= //
+
+  const handleAddReport = async (e) => {
+    e.preventDefault();
+
+    try {
+      setSaving(true);
+
+      const report = await apiRequest("/reports", {
+        method: "POST",
+        body: JSON.stringify(newReport),
+      });
+
+      setReports((prev) => [...prev, report]);
+
+      setNewReport({
+        patient: "",
+        type: "",
+        doctor: "Dr. Smith",
+        date: "",
+      });
+
+      alert("Report added successfully!");
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ================= SEND MESSAGE ================= //
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+
+    try {
+      setSaving(true);
+
+      const message = await apiRequest("/messages", {
+        method: "POST",
+        body: JSON.stringify(newMessage),
+      });
+
+      setMessages((prev) => [message, ...prev]);
+
+      setNewMessage({
+        sender: "Dr. Smith",
+        subject: "",
+        content: "",
+      });
+
+      setShowCompose(false);
+      alert("Message sent successfully!");
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ================= DASHBOARD CALCULATIONS ================= //
+
+  const today = new Date().toLocaleDateString("en-CA");
+
+  const todaysAppointments = appointments.filter(
+    (apt) => apt.date === today
+  );
+
+  const pendingCount = todaysAppointments.filter(
+    (apt) => apt.status?.toLowerCase() === "pending"
+  ).length;
+
+  const criticalPatients = patients.filter(
+    (patient) => patient.status === "Critical"
+  );
+
+  // ================= LOADING / ERROR ================= //
+
+  if (loading) {
+    return (
+      <div className="doctor-dashboard">
+        <div className="main-panel">
+          <h2>Loading MediPredict Dashboard...</h2>
+          <p>Connecting to live backend.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="doctor-dashboard">
+        <div className="main-panel">
+          <h2>Unable to load dashboard</h2>
+          <p>{error}</p>
+          <button onClick={fetchDashboardData}>
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ================= TAB CONTENT ================= //
 
   const renderTabContent = () => {
     switch (activeTab) {
       case "dashboard":
         return (
           <div className="dashboard-overview">
+
             <div className="stats-cards">
               <div className="stat-card">
                 <h3>Total Patients</h3>
-                <span className="stat-number">{patientData.length}</span>
-                <span className="stat-trend up">+12%</span>
+                <span className="stat-number">{patients.length}</span>
+                <span className="stat-trend up">Live Data</span>
               </div>
+
               <div className="stat-card">
                 <h3>Appointments Today</h3>
-                <span className="stat-number">{todaysAppointments.length}</span>
-                <span className="stat-trend">{pendingCount} pending</span>
+                <span className="stat-number">
+                  {todaysAppointments.length}
+                </span>
+                <span className="stat-trend">
+                  {pendingCount} pending
+                </span>
               </div>
+
               <div className="stat-card">
                 <h3>Critical Cases</h3>
-                <span className="stat-number">{patientData.filter((p) => p.status === "Critical").length}</span>
-                <span className="stat-trend down">-1</span>
+                <span className="stat-number">
+                  {criticalPatients.length}
+                </span>
+                <span className="stat-trend down">
+                  Requires Attention
+                </span>
               </div>
+
               <div className="stat-card">
                 <h3>Prediction Accuracy</h3>
-                <span className="stat-number">94%</span>
-                <span className="stat-trend up">+2%</span>
+                <span className="stat-number">
+                  94%
+                </span>
+                <span className="stat-trend up">
+                  Demo Metric
+                </span>
               </div>
             </div>
 
             <div className="main-cards">
               <div className="card upcoming-appointments">
-                <h2>Upcoming Appointments</h2>
+                <h2>Today's Appointments</h2>
                 <ul>
                   {todaysAppointments.map((apt) => (
                     <li key={apt.id}>
                       <div className="apt-time">{apt.time}</div>
                       <div className="apt-info">
-                        <div className="apt-patient">{apt.patient}</div>
+                        <div className="apt-patient">
+                          {apt.patient}
+                        </div>
                         <div className="apt-type">{apt.type}</div>
                       </div>
-                      <div className={`apt-status ${apt.status.toLowerCase()}`}>{apt.status}</div>
+                      <div className={`apt-status ${apt.status.toLowerCase()}`}>
+                        {apt.status}
+                      </div>
                     </li>
                   ))}
+
+                  {todaysAppointments.length === 0 && (
+                    <li>No appointments scheduled today.</li>
+                  )}
                 </ul>
               </div>
 
               <div className="card critical-patients">
                 <h2>Patients Needing Attention</h2>
                 <ul>
-                  {patientData.filter((p) => p.status === "Critical").map((patient) => (
-                    <li key={patient.id} onClick={() => setSelectedPatient(patient)}>
-                      <div className="patient-avatar">{patient.name.charAt(0)}</div>
+                  {criticalPatients.map((patient) => (
+                    <li key={patient.id}>
+                      <div className="patient-avatar">
+                        {patient.name.charAt(0)}
+                      </div>
                       <div className="patient-info">
                         <h4>{patient.name}</h4>
-                        <p>{patient.condition} • {patient.age}y</p>
+                        <p>
+                          {patient.condition} • {patient.age}y
+                        </p>
                       </div>
-                      <div className="patient-status critical">Critical</div>
+                      <div className="patient-status critical">
+                        Critical
+                      </div>
                     </li>
                   ))}
+
+                  {criticalPatients.length === 0 && (
+                    <li>No critical patients.</li>
+                  )}
                 </ul>
               </div>
             </div>
@@ -147,31 +372,88 @@ const MediPredictDashboard = () => {
                 <div className="tool-card">
                   <div className="tool-icon">🫁</div>
                   <h3>Lung Cancer Predictor</h3>
-                  <p>Upload CT scans for immediate analysis</p>
-                  <button>Run Analysis</button>
-              
+                  <p>Upload CT scans for analysis.</p>
+                  <button disabled>Run Analysis</button>
                 </div>
+
                 <div className="tool-card">
                   <div className="tool-icon">👩</div>
                   <h3>Breast Cancer Predictor</h3>
-                  <p>Mammography analysis with 96% accuracy</p>
-                  <button>Run Analysis</button>
+                  <p>Mammography analysis.</p>
+                  <button disabled>Run Analysis</button>
                 </div>
+
                 <div className="tool-card">
                   <div className="tool-icon">🧬</div>
                   <h3>Genetic Risk Assessment</h3>
-                  <p>Evaluate hereditary cancer risks</p>
-                  <button>Run Analysis</button>
+                  <p>Evaluate hereditary cancer risks.</p>
+                  <button disabled>Run Analysis</button>
                 </div>
               </div>
             </div>
+
           </div>
         );
+
+      // ================= PATIENTS ================= //
 
       case "patients":
         return (
           <div className="tab-content">
             <h2>Patient Records</h2>
+
+            <form onSubmit={handleAddPatient} className="compose-panel">
+              <h3>Add New Patient</h3>
+
+              <input
+                placeholder="Patient Name"
+                value={newPatient.name}
+                onChange={(e) =>
+                  setNewPatient({ ...newPatient, name: e.target.value })
+                }
+                required
+              />
+
+              <input
+                type="number"
+                min="1"
+                placeholder="Age"
+                value={newPatient.age}
+                onChange={(e) =>
+                  setNewPatient({ ...newPatient, age: e.target.value })
+                }
+                required
+              />
+
+              <input
+                placeholder="Condition"
+                value={newPatient.condition}
+                onChange={(e) =>
+                  setNewPatient({
+                    ...newPatient,
+                    condition: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <select
+                value={newPatient.status}
+                onChange={(e) =>
+                  setNewPatient({ ...newPatient, status: e.target.value })
+                }
+              >
+                <option>Monitoring</option>
+                <option>Critical</option>
+                <option>Stable</option>
+                <option>Improving</option>
+              </select>
+
+              <button type="submit" disabled={saving}>
+                {saving ? "Saving..." : "Add Patient"}
+              </button>
+            </form>
+
             <div className="patients-table">
               <div className="table-header">
                 <span>Name</span>
@@ -179,18 +461,105 @@ const MediPredictDashboard = () => {
                 <span>Condition</span>
                 <span>Status</span>
                 <span>Last Visit</span>
-                <span>Actions</span>
               </div>
-              {patientData.map((patient) => (
+
+              {patients.map((patient) => (
                 <div key={patient.id} className="table-row">
                   <span>{patient.name}</span>
                   <span>{patient.age}</span>
                   <span>{patient.condition}</span>
-                  <span className={`status ${patient.status.toLowerCase()}`}>{patient.status}</span>
+                  <span className={`status ${patient.status.toLowerCase()}`}>
+                    {patient.status}
+                  </span>
                   <span>{patient.lastVisit}</span>
-                  <span>
-                    <button className="action-btn">View</button>
-                    <button className="action-btn">Edit</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      // ================= APPOINTMENTS ================= //
+
+      case "appointments":
+        return (
+          <div className="tab-content">
+            <h2>Appointment Schedule</h2>
+
+            <form onSubmit={handleAddAppointment} className="compose-panel">
+              <h3>Book Appointment</h3>
+
+              <input
+                placeholder="Patient Name"
+                value={newAppointment.patient}
+                onChange={(e) =>
+                  setNewAppointment({
+                    ...newAppointment,
+                    patient: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <input
+                type="date"
+                value={newAppointment.date}
+                onChange={(e) =>
+                  setNewAppointment({
+                    ...newAppointment,
+                    date: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <input
+                type="time"
+                value={newAppointment.time}
+                onChange={(e) =>
+                  setNewAppointment({
+                    ...newAppointment,
+                    time: e.target.value,
+                  })
+                }
+                required
+              />
+
+              <select
+                value={newAppointment.type}
+                onChange={(e) =>
+                  setNewAppointment({
+                    ...newAppointment,
+                    type: e.target.value,
+                  })
+                }
+              >
+                <option>Consultation</option>
+                <option>Follow-up</option>
+                <option>Treatment</option>
+              </select>
+
+              <button type="submit" disabled={saving}>
+                {saving ? "Saving..." : "Book Appointment"}
+              </button>
+            </form>
+
+            <div className="patients-table">
+              <div className="table-header">
+                <span>Patient</span>
+                <span>Date</span>
+                <span>Time</span>
+                <span>Type</span>
+                <span>Status</span>
+              </div>
+
+              {appointments.map((apt) => (
+                <div key={apt.id} className="table-row">
+                  <span>{apt.patient}</span>
+                  <span>{apt.date}</span>
+                  <span>{apt.time}</span>
+                  <span>{apt.type}</span>
+                  <span className={`status ${apt.status.toLowerCase()}`}>
+                    {apt.status}
                   </span>
                 </div>
               ))}
@@ -198,64 +567,56 @@ const MediPredictDashboard = () => {
           </div>
         );
 
-      case "appointments":
-        const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-        const monthNames = [
-          "January","February","March","April","May","June","July","August","September","October","November","December"
-        ];
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth();
-        const todayDate = now.getDate();
-        const totalDays = daysInMonth(currentYear, currentMonth);
-        const calendarDays = Array.from({ length: totalDays }, (_, i) => i + 1);
-
-        return (
-          <div className="tab-content">
-            <h2>Appointment Schedule</h2>
-            <div className="calendar-view">
-              <div className="calendar-header">
-                <button>{`< Previous`}</button>
-                <h3>{monthNames[currentMonth]} {currentYear}</h3>
-                <button>{`Next >`}</button>
-              </div>
-              <div className="calendar-grid">
-                {calendarDays.map((day) => {
-                  const hasAppointment = appointments.some(
-                    (apt) => new Date(apt.date).getDate() === day &&
-                             new Date(apt.date).getMonth() === currentMonth
-                  );
-                  const isToday = day === todayDate;
-                  return (
-                    <div key={day} className={`calendar-day ${hasAppointment ? "has-apt" : ""} ${isToday ? "today" : ""}`}>
-                      <span>{day}</span>
-                      {hasAppointment && (
-                        <ul>
-                          {appointments
-                            .filter(
-                              (apt) =>
-                                new Date(apt.date).getDate() === day &&
-                                new Date(apt.date).getMonth() === currentMonth
-                            )
-                            .map((apt) => (
-                              <li key={apt.id} className={`apt-status ${apt.status.toLowerCase()}`}>
-                                {apt.time} - {apt.patient}
-                              </li>
-                            ))}
-                        </ul>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        );
+      // ================= REPORTS ================= //
 
       case "reports":
         return (
           <div className="tab-content">
             <h2>Patient Reports</h2>
+
+            <form onSubmit={handleAddReport} className="compose-panel">
+              <h3>Add New Report</h3>
+
+              <input
+                placeholder="Patient Name"
+                value={newReport.patient}
+                onChange={(e) =>
+                  setNewReport({ ...newReport, patient: e.target.value })
+                }
+                required
+              />
+
+              <input
+                placeholder="Report Type"
+                value={newReport.type}
+                onChange={(e) =>
+                  setNewReport({ ...newReport, type: e.target.value })
+                }
+                required
+              />
+
+              <input
+                placeholder="Doctor Name"
+                value={newReport.doctor}
+                onChange={(e) =>
+                  setNewReport({ ...newReport, doctor: e.target.value })
+                }
+                required
+              />
+
+              <input
+                type="date"
+                value={newReport.date}
+                onChange={(e) =>
+                  setNewReport({ ...newReport, date: e.target.value })
+                }
+              />
+
+              <button type="submit" disabled={saving}>
+                {saving ? "Saving..." : "Add Report"}
+              </button>
+            </form>
+
             <div className="patients-table">
               <div className="table-header">
                 <span>Patient</span>
@@ -263,18 +624,16 @@ const MediPredictDashboard = () => {
                 <span>Doctor</span>
                 <span>Date</span>
                 <span>Status</span>
-                <span>Actions</span>
               </div>
+
               {reports.map((report) => (
                 <div key={report.id} className="table-row">
                   <span>{report.patient}</span>
                   <span>{report.type}</span>
                   <span>{report.doctor}</span>
                   <span>{report.date}</span>
-                  <span className={`status ${report.status.toLowerCase()}`}>{report.status}</span>
-                  <span>
-                    <button className="action-btn">View</button>
-                    <button className="action-btn">Download</button>
+                  <span className={`status ${report.status.toLowerCase()}`}>
+                    {report.status}
                   </span>
                 </div>
               ))}
@@ -282,146 +641,59 @@ const MediPredictDashboard = () => {
           </div>
         );
 
+      // ================= ANALYTICS ================= //
+
       case "analytics":
         return (
           <div className="tab-content">
             <h2>Analytics Overview</h2>
+
             <div className="analytics-grid">
               <div className="analytics-card">
                 <h3>Patient Growth</h3>
-                <p>15% increase in last month</p>
+                <p>{analytics.patientGrowth || "No data available"}</p>
               </div>
+
               <div className="analytics-card">
                 <h3>Appointment Trends</h3>
-                <p>Appointments up by 10%</p>
+                <p>{analytics.appointmentTrends || "No data available"}</p>
               </div>
+
               <div className="analytics-card">
                 <h3>Critical Cases</h3>
-                <p>3 new critical patients this week</p>
+                <p>{analytics.criticalCases || "No data available"}</p>
               </div>
+
               <div className="analytics-card">
                 <h3>Prediction Accuracy</h3>
-                <p>94% reliable predictions</p>
+                <p>{analytics.predictionAccuracy || "No data available"}</p>
               </div>
             </div>
           </div>
         );
+
+      // ================= MESSAGES ================= //
 
       case "messages":
         return (
           <div className="tab-content">
             <h2>Messages</h2>
-            <button className="compose-btn" onClick={() => setShowCompose(!showCompose)}>
+
+            <button
+              className="compose-btn"
+              onClick={() => setShowCompose(!showCompose)}
+            >
               {showCompose ? "Close Compose" : "New Message"}
             </button>
 
             {showCompose && (
-              <div className="compose-panel">
-                <input 
-                  type="text" 
-                  placeholder="Recipient" 
-                  value={newMessage.recipient} 
-                  onChange={(e) => setNewMessage({ ...newMessage, recipient: e.target.value })} 
-                />
-                <input 
-                  type="text" 
-                  placeholder="Subject" 
-                  value={newMessage.subject} 
-                  onChange={(e) => setNewMessage({ ...newMessage, subject: e.target.value })} 
-                />
-                <textarea 
-                  placeholder="Message content..." 
-                  value={newMessage.content} 
-                  onChange={(e) => setNewMessage({ ...newMessage, content: e.target.value })} 
-                />
-                <button onClick={handleSendMessage}>Send</button>
-              </div>
-            )}
-
-            <div className="messages-grid">
-              {messages.map((msg) => (
-                <div key={msg.id} className={`message-card ${msg.unread ? "unread" : ""}`}>
-                  <div className="msg-header">
-                    <span className="msg-sender">{msg.sender}</span>
-                    <span className="msg-date">{msg.date}</span>
-                  </div>
-                  <div className="msg-subject">{msg.subject}</div>
-                  <div className="msg-content">{msg.content}</div>
-                  <div className="msg-actions">
-                    <button onClick={() => setReplyOpenId(replyOpenId === msg.id ? null : msg.id)}>Reply</button>
-                    <button>Mark Read</button>
-                  </div>
-
-                  {replyOpenId === msg.id && (
-                    <div className="reply-panel">
-                      <textarea 
-                        placeholder="Type your reply..." 
-                        value={replyContent} 
-                        onChange={(e) => setReplyContent(e.target.value)}
-                      />
-                      <button onClick={() => handleSendReply(msg.id)}>Send Reply</button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      default:
-        return <div className="tab-content"><p>Tab content not available.</p></div>;
-    }
-  };
-
-  return (
-    <div className="doctor-dashboard">
-      <header className="dashboard-header">
-        <div className="header-left">
-          <h1>MediPredict</h1>
-          <span>Oncology Dashboard</span>
-        </div>
-        <div className="header-right">
-          <div className="search-box">
-            <input type="text" placeholder="Search patients, records..." />
-          </div>
-          <div className="notifications">
-            <span>🔔</span>
-          </div>
-          <div className="doctor-profile">
-            <div className="avatar">DS</div>
-            <span>Dr. Smith</span>
-          </div>
-        </div>
-      </header>
-
-      <div className="dashboard-content">
-        <nav className="sidebar">
-          <ul>
-            <li className={activeTab === "dashboard" ? "active" : ""} onClick={() => setActiveTab("dashboard")}>
-              <span className="icon">📊</span> Dashboard
-            </li>
-            <li className={activeTab === "patients" ? "active" : ""} onClick={() => setActiveTab("patients")}>
-              <span className="icon">👨‍👩‍👧‍👦</span> Patients
-            </li>
-            <li className={activeTab === "appointments" ? "active" : ""} onClick={() => setActiveTab("appointments")}>
-              <span className="icon">📅</span> Appointments
-            </li>
-            <li className={activeTab === "reports" ? "active" : ""} onClick={() => setActiveTab("reports")}>
-              <span className="icon">📋</span> Reports
-            </li>
-            <li className={activeTab === "analytics" ? "active" : ""} onClick={() => setActiveTab("analytics")}>
-              <span className="icon">📈</span> Analytics
-            </li>
-            <li className={activeTab === "messages" ? "active" : ""} onClick={() => setActiveTab("messages")}>
-              <span className="icon">✉️</span> Messages
-            </li>
-          </ul>
-        </nav>
-
-        <main className="main-panel">{renderTabContent()}</main>
-      </div>
-    </div>
-  );
-};
-
-export default MediPredictDashboard;
+              <form onSubmit={handleSendMessage} className="compose-panel">
+                <input
+                  placeholder="Subject"
+                  value={newMessage.subject}
+                  onChange={(e) =>
+                    setNewMessage({
+                      ...newMessage,
+                      subject: e.target.value,
+                    })
+                  }
