@@ -8,7 +8,7 @@
   A full-stack healthcare dashboard designed to simplify oncology patient management, appointments, medical reports, analytics, and future AI-powered cancer prediction.
 </p>
 
-**Live Demo**:https://medipredict-k4499oph7-virus21069-2800s-projects.vercel.app/
+**Live Demo**:https://medipredict-hxoxkc2ct-virus21069-2800s-projects.vercel.app/
 
 ---
 
