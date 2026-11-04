@@ -709,3 +709,236 @@ const MediPredictDashboard = () => {
                   <span>{report.date}</span>
                   <span
                     className={`status ${report.status.toLowerCase()}`}
+                     >
+                    {report.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
+      // ================= ANALYTICS ================= //
+
+      case "analytics":
+        return (
+          <div className="tab-content">
+            <h2>Analytics Overview</h2>
+
+            <div className="analytics-grid">
+              <div className="analytics-card">
+                <h3>Patient Growth</h3>
+                <p>{analytics.patientGrowth || "No data available"}</p>
+              </div>
+
+              <div className="analytics-card">
+                <h3>Appointment Trends</h3>
+                <p>{analytics.appointmentTrends || "No data available"}</p>
+              </div>
+
+              <div className="analytics-card">
+                <h3>Critical Cases</h3>
+                <p>{analytics.criticalCases || "No data available"}</p>
+              </div>
+
+              <div className="analytics-card">
+                <h3>Prediction Accuracy</h3>
+                <p>{analytics.predictionAccuracy || "No data available"}</p>
+              </div>
+            </div>
+          </div>
+        );
+
+      // ================= MESSAGES ================= //
+
+      case "messages":
+        return (
+          <div className="tab-content">
+            <h2>Messages</h2>
+
+            <button
+              className="compose-btn"
+              onClick={() => setShowCompose(!showCompose)}
+            >
+              {showCompose ? "Close Compose" : "New Message"}
+            </button>
+
+            {showCompose && (
+              <form
+                onSubmit={handleSendMessage}
+                className="compose-panel"
+              >
+                <input
+                  placeholder="Recipient"
+                  value={newMessage.recipient}
+                  onChange={(e) =>
+                    setNewMessage({
+                      ...newMessage,
+                      recipient: e.target.value,
+                    })
+                  }
+                />
+
+                <input
+                  placeholder="Subject"
+                  value={newMessage.subject}
+                  onChange={(e) =>
+                    setNewMessage({
+                      ...newMessage,
+                      subject: e.target.value,
+                    })
+                  }
+                  required
+                />
+
+                <textarea
+                  placeholder="Message content..."
+                  value={newMessage.content}
+                  onChange={(e) =>
+                    setNewMessage({
+                      ...newMessage,
+                      content: e.target.value,
+                    })
+                  }
+                  required
+                />
+
+                <button type="submit" disabled={saving}>
+                  {saving ? "Sending..." : "Send Message"}
+                </button>
+              </form>
+            )}
+
+            <div className="messages-grid">
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`message-card ${
+                    msg.unread ? "unread" : ""
+                  }`}
+                >
+                  <div className="msg-header">
+                    <span className="msg-sender">{msg.sender}</span>
+                    <span className="msg-date">{msg.date}</span>
+                  </div>
+
+                  <div className="msg-subject">{msg.subject}</div>
+                  <div className="msg-content">{msg.content}</div>
+
+                  <div className="msg-actions">
+                    <button
+                      onClick={() =>
+                        setReplyOpenId(
+                          replyOpenId === msg.id ? null : msg.id
+                        )
+                      }
+                    >
+                      Reply
+                    </button>
+                  </div>
+
+                  {replyOpenId === msg.id && (
+                    <div className="reply-panel">
+                      <textarea
+                        placeholder="Type your reply..."
+                        value={replyContent}
+                        onChange={(e) =>
+                          setReplyContent(e.target.value)
+                        }
+                      />
+                      <button
+                        onClick={() => handleSendReply(msg.id)}
+                      >
+                        Send Reply
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {messages.length === 0 && <p>No messages available.</p>}
+            </div>
+          </div>
+        );
+
+      default:
+        return (
+          <div className="tab-content">
+            <p>Tab content not available.</p>
+          </div>
+        );
+    }
+  };
+
+  // ================= MAIN LAYOUT ================= //
+
+  return (
+    <div className="doctor-dashboard">
+      <header className="dashboard-header">
+        <div className="header-left">
+          <h1>MediPredict</h1>
+          <span>Oncology Dashboard</span>
+        </div>
+
+        <div className="header-right">
+          <div className="search-box">
+            <input
+              type="text"
+              placeholder="Search patients, records..."
+            />
+          </div>
+
+          <div className="notifications">
+            <span>🔔</span>
+          </div>
+
+          <div className="doctor-profile">
+            <div className="avatar">DS</div>
+            <span>Dr. Smith</span>
+          </div>
+        </div>
+      </header>
+
+      <div className="dashboard-content">
+        <nav className="sidebar">
+          <ul>
+            {[
+              ["dashboard", "📊", "Dashboard"],
+              ["patients", "👨‍👩‍👧‍👦", "Patients"],
+              ["appointments", "📅", "Appointments"],
+              ["reports", "📋", "Reports"],
+              ["analytics", "📈", "Analytics"],
+              ["messages", "✉️", "Messages"],
+            ].map(([tab, icon, label]) => (
+              <li
+                key={tab}
+                className={activeTab === tab ? "active" : ""}
+                onClick={() => setActiveTab(tab)}
+              >
+                <span className="icon">{icon}</span> {label}
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        <main className="main-panel">
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              marginBottom: "15px",
+            }}
+          >
+            <button onClick={fetchDashboardData}>
+              ↻ Refresh Data
+            </button>
+          </div>
+
+          {renderTabContent()}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default MediPredictDashboard;
