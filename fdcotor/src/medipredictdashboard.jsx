@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import "./medipredictdashboard.css";
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api"; // backend base URL
+const API_URL = "https://medipredict-4bkd.onrender.com/api"; // backend base URL
 
 const MediPredictDashboard = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
